@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>秘書アプリ</title>
+  <meta name="description" content="声で予定登録・アポ先企業レポート・領収書管理ができる個人用秘書アプリ。データは端末内にのみ保存されます。">
+  <meta name="theme-color" content="#2f5d50">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="app-header">
+    <h1>秘書アプリ</h1>
+    <div id="google-status" class="google-status">
+      <button id="btn-google-signin" class="btn btn-small">Googleに接続</button>
+    </div>
+  </header>
+
+  <p class="privacy-banner">🔒 予定・レポート・領収書のデータは<strong>この端末のブラウザ内だけ</strong>に保存されます。GitHub Pages には一切アップロードされません。</p>
+
+  <main>
+    <!-- ===== 予定 ===== -->
+    <section id="tab-schedule" class="tab-panel active" aria-labelledby="nav-schedule">
+      <div class="card">
+        <h2>声で予定を入れる</h2>
+        <p class="hint">例：「明日の午後3時から1時間、株式会社サンプルと打ち合わせ」</p>
+        <div class="voice-box">
+          <button id="btn-mic" class="mic" aria-label="音声入力を開始">
+            <svg viewBox="0 0 24 24" width="36" height="36" aria-hidden="true"><path fill="currentColor" d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V22h2v-3.08A7 7 0 0 0 19 12h-2Z"/></svg>
+          </button>
+          <p id="mic-status" class="mic-status">マイクをタップして話してください</p>
+        </div>
+        <label class="field">
+          <span>認識したテキスト（手入力・修正もOK）</span>
+          <textarea id="voice-text" rows="2" placeholder="ここに入力しても登録できます"></textarea>
+        </label>
+        <button id="btn-parse" class="btn">内容を読み取る</button>
+      </div>
+
+      <form id="event-form" class="card hidden">
+        <h2>登録内容の確認</h2>
+        <label class="field"><span>タイトル</span><input id="ev-title" required></label>
+        <label class="field"><span>会社名（企業レポート用）</span><input id="ev-company" placeholder="任意"></label>
+        <div class="row">
+          <label class="field"><span>日付</span><input id="ev-date" type="date" required></label>
+          <label class="field check"><input id="ev-allday" type="checkbox"> 終日</label>
+        </div>
+        <div class="row" id="ev-time-row">
+          <label class="field"><span>開始</span><input id="ev-start" type="time"></label>
+          <label class="field"><span>終了</span><input id="ev-end" type="time"></label>
+        </div>
+        <label class="field"><span>場所</span><input id="ev-location" placeholder="任意"></label>
+        <label class="field"><span>メモ</span><textarea id="ev-memo" rows="2"></textarea></label>
+        <div class="actions">
+          <button type="submit" class="btn btn-primary">Googleカレンダーに登録</button>
+          <button type="button" id="btn-ev-link" class="btn">リンクで登録（ログイン不要）</button>
+          <button type="button" id="btn-ev-cancel" class="btn btn-ghost">キャンセル</button>
+        </div>
+      </form>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>今後の予定</h2>
+          <button id="btn-load-gcal" class="btn btn-small">Googleから読込</button>
+        </div>
+        <ul id="appointment-list" class="list"></ul>
+      </div>
+    </section>
+
+    <!-- ===== 企業レポート ===== -->
+    <section id="tab-research" class="tab-panel" aria-labelledby="nav-research">
+      <div class="card">
+        <h2>アポ先の企業を調べる</h2>
+        <p class="hint">予定一覧の「調べる」からも開けます。Claude APIキーを設定すると、Web検索でより詳しいレポートを作れます。</p>
+        <label class="field"><span>会社名</span><input id="rs-company" placeholder="例：株式会社サンプル"></label>
+        <label class="field"><span>関連する予定・目的（任意）</span><input id="rs-context" placeholder="例：10/15 新規提案の打ち合わせ"></label>
+        <button id="btn-research" class="btn btn-primary">調べてレポートを作る</button>
+      </div>
+
+      <div id="report-view" class="card hidden">
+        <div class="card-head">
+          <h2 id="report-title">レポート</h2>
+        </div>
+        <div id="report-body" class="report"></div>
+        <label class="field"><span>送信先メールアドレス</span><input id="rs-to" type="email" placeholder="you@example.com"></label>
+        <div class="actions">
+          <button id="btn-send-gmail" class="btn btn-primary">Gmailで送信</button>
+          <button id="btn-send-mailto" class="btn">メールアプリで開く</button>
+          <button id="btn-copy-report" class="btn btn-ghost">コピー</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>保存したレポート</h2>
+        <ul id="report-list" class="list"></ul>
+      </div>
+    </section>
+
+    <!-- ===== 領収書 ===== -->
+    <section id="tab-receipts" class="tab-panel" aria-labelledby="nav-receipts">
+      <form id="receipt-form" class="card">
+        <h2>領収書を登録</h2>
+        <label class="photo-drop">
+          <input id="rc-photo" type="file" accept="image/*" capture="environment">
+          <img id="rc-preview" alt="" class="hidden">
+          <span id="rc-photo-label">📷 写真を撮る / 画像を選ぶ</span>
+        </label>
+        <div class="actions">
+          <button type="button" id="btn-ocr" class="btn" disabled>文字を読み取る（OCR）</button>
+          <button type="button" id="btn-ai-read" class="btn" disabled>AIで読み取る</button>
+        </div>
+        <p id="ocr-status" class="hint"></p>
+        <div class="row">
+          <label class="field"><span>日付</span><input id="rc-date" type="date" required></label>
+          <label class="field"><span>金額（円）</span><input id="rc-amount" type="number" inputmode="numeric" min="0" step="1" required></label>
+        </div>
+        <label class="field"><span>店名・支払先</span><input id="rc-store" required></label>
+        <div class="row">
+          <label class="field"><span>区分</span>
+            <select id="rc-kind">
+              <option value="business">仕事（経費）</option>
+              <option value="household">家計</option>
+            </select>
+          </label>
+          <label class="field"><span>カテゴリ</span>
+            <select id="rc-category"></select>
+          </label>
+        </div>
+        <div class="row">
+          <label class="field"><span>支払方法</span>
+            <select id="rc-payment">
+              <option>現金</option><option>クレジットカード</option><option>電子マネー</option><option>QR決済</option><option>銀行振込</option><option>その他</option>
+            </select>
+          </label>
+          <label class="field"><span>登録番号（インボイス）</span><input id="rc-invoice" placeholder="T1234567890123"></label>
+        </div>
+        <label class="field"><span>メモ</span><input id="rc-memo"></label>
+        <div class="actions">
+          <button type="submit" class="btn btn-primary">保存</button>
+          <button type="reset" class="btn btn-ghost">クリア</button>
+        </div>
+      </form>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>一覧・集計</h2>
+          <input id="rc-month" type="month" aria-label="表示する月">
+        </div>
+        <div class="segmented" role="group" aria-label="区分で絞り込み">
+          <button data-kind="all" class="seg active">すべて</button>
+          <button data-kind="business" class="seg">仕事</button>
+          <button data-kind="household" class="seg">家計</button>
+        </div>
+        <div id="rc-summary" class="summary"></div>
+        <ul id="receipt-list" class="list"></ul>
+        <div class="actions">
+          <button id="btn-csv" class="btn">CSV書き出し（この月）</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 設定 ===== -->
+    <section id="tab-settings" class="tab-panel" aria-labelledby="nav-settings">
+      <form id="settings-form" class="card">
+        <h2>設定</h2>
+        <p class="hint">ここで入力した値はこの端末のブラウザにだけ保存されます。共用PCでは使わないでください。</p>
+        <label class="field"><span>Google OAuth クライアントID</span><input id="st-client-id" placeholder="xxxx.apps.googleusercontent.com" autocomplete="off"></label>
+        <p class="hint">カレンダー直接登録・予定読込・Gmail送信に使います。作り方は README を参照。</p>
+        <label class="field"><span>Claude APIキー（任意）</span><input id="st-claude-key" type="password" placeholder="sk-ant-..." autocomplete="off"></label>
+        <p class="hint">企業レポートのWeb調査と、領収書のAI読み取りに使います。</p>
+        <label class="field"><span>レポートの送信先（既定）</span><input id="st-email" type="email" placeholder="you@example.com"></label>
+        <label class="field"><span>予定の標準の長さ（分）</span><input id="st-duration" type="number" min="5" step="5" value="60"></label>
+        <div class="actions">
+          <button type="submit" class="btn btn-primary">保存</button>
+        </div>
+      </form>
+
+      <div class="card">
+        <h2>バックアップ</h2>
+        <p class="hint">機種変更やブラウザのデータ削除に備えて、定期的に書き出してください。ファイルは公開リポジトリに置かないでください。</p>
+        <div class="actions">
+          <button id="btn-backup" class="btn">全データを書き出す</button>
+          <label class="btn">読み込む<input id="backup-file" type="file" accept="application/json" hidden></label>
+          <button id="btn-wipe" class="btn btn-danger">全データ削除</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar" role="tablist">
+    <button id="nav-schedule" data-tab="schedule" class="tab active" role="tab">🗓️<span>予定</span></button>
+    <button id="nav-research" data-tab="research" class="tab" role="tab">🏢<span>企業レポート</span></button>
+    <button id="nav-receipts" data-tab="receipts" class="tab" role="tab">🧾<span>領収書</span></button>
+    <button id="nav-settings" data-tab="settings" class="tab" role="tab">⚙️<span>設定</span></button>
+  </nav>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <dialog id="image-dialog">
+    <img id="image-dialog-img" alt="領収書の画像">
+    <form method="dialog"><button class="btn">閉じる</button></form>
+  </dialog>
+
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

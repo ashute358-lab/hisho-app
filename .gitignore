@@ -1,0 +1,6 @@
+# 個人データのバックアップや書き出しファイルを誤ってコミットしないため
+hisho-backup_*.json
+receipts_*.csv
+*.local.*
+.DS_Store
+node_modules/
